@@ -349,25 +349,40 @@
         ];
         const photoSprites = [];
         const textureLoader = new THREE.TextureLoader();
+        const pColors = ["#FF3333", "#00EE55", "#3388FF", "#FFAA00", "#AA33FF", "#FF00FF"];
 
         photoFiles.forEach((file, i) => {
-            textureLoader.load(file, (tex) => {
-                const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex }));
-                // 随机分布在树周围
-                const a = (i / photoFiles.length) * Math.PI * 2;
-                const r = 2;
-                const y = (Math.random() - 0.5) * 10;
-                sprite.position.set(Math.cos(a) * r, y, Math.sin(a) * r);
+            // 先创建带颜色的占位符，确保即使图片加载失败也能看到东西
+            const canvas = document.createElement('canvas'); canvas.width = 128; canvas.height = 150;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, 128, 150);
+            ctx.fillStyle = pColors[i % pColors.length]; ctx.fillRect(10, 10, 108, 108);
 
-                // 记录原始位置和炸开目标位置
-                sprite.userData = {
-                    origPos: sprite.position.clone(),
-                    explodeTarget: new THREE.Vector3(Math.cos(a) * 12, y * 1.5, Math.sin(a) * 12),
-                    isZoomed: false
-                };
-                sprite.scale.set(4, 5, 1); // 默认大小
-                photosGroup.add(sprite);
-                photoSprites.push(sprite);
+            const material = new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(canvas) });
+            const sprite = new THREE.Sprite(material);
+
+            // 随机分布
+            const a = (i / photoFiles.length) * Math.PI * 2;
+            const r = 2;
+            const y = (Math.random() - 0.5) * 10;
+            sprite.position.set(Math.cos(a) * r, y, Math.sin(a) * r);
+
+            sprite.userData = {
+                origPos: sprite.position.clone(),
+                explodeTarget: new THREE.Vector3(Math.cos(a) * 12, y * 1.5, Math.sin(a) * 12),
+                isZoomed: false
+            };
+            sprite.scale.set(0, 0, 0); // 初始隐藏
+            photosGroup.add(sprite);
+            photoSprites.push(sprite);
+
+            // 尝试加载图片
+            textureLoader.load(encodeURIComponent(file), (tex) => {
+                sprite.material.map = tex;
+                sprite.material.needsUpdate = true;
+            }, undefined, (err) => {
+                console.warn("Photo load failed:", file);
+                // 失败时保持占位符
             });
         });
 
@@ -474,7 +489,7 @@
             smoothExpansion += (target - smoothExpansion) * 0.1;
 
             // 状态机逻辑
-            if (smoothExpansion > 0.8) {
+            if (smoothExpansion > 0.5) {
                 // 炸开状态
                 if (handVelocity < 0.002 && noMoveTime > 0.5) {
                     // 停止移动 -> 放大最近的照片
